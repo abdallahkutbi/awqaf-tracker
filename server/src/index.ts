@@ -1,3 +1,6 @@
+//api server for awqaf tracker
+
+//imports
 import express from "express";
 import cors from "cors";
 
