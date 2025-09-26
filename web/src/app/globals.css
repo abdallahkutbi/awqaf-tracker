@@ -1,13 +1,44 @@
 :root {
+  /* Color variables */
   --background: #ffffff;
   --foreground: #171717;
+  --body-color: hsl(230, 100%, 97%);
+  --title-color: hsl(230, 70%, 16%);
+  --first-color: hsl(231, 13%, 52%);
+  --hover-color: hsl(230, 70%, 46%);
+  --dark-background: #0a0a0a;
+  --dark-foreground: #ededed;
+  
+  /* Navigation variables */
+  --header-height: 3.5rem;
+  --font-semi-bold: 600;
+  --z-fixed: 100;
 }
 
+/* Dark mode color overrides */
+/*
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--dark-background);
+    --foreground: var(--dark-foreground);
   }
+}
+*/
+
+/* Page variables */
+.page {
+  display: grid;
+  grid-template-rows: 20px 1fr 20px;
+  align-items: center;
+  justify-items: center;
+}
+
+.main {
+  font-family: "ui-sans-serif, system-ui";
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  grid-row-start: 2;
 }
 
 html,
@@ -38,5 +69,402 @@ a {
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
+  }
+}
+
+.container {
+  font-family: "ui-sans-serif, system-ui";
+  margin: 20px;
+  padding-top: var(--header-height);
+}
+.body {
+  font-family: "ui-sans-serif, system-ui";
+  margin: 20px;
+}
+/*=============== HEADER & NAV ===============*/
+.header {
+  position: fixed; /*fixed header*/
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--body-color);
+  box-shadow: 0 2px 16px hsla(230, 75%, 32%, .15);
+  z-index: var(--z-fixed);
+}
+
+.nav { /*nav for the header*/
+  height: var(--header-height);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav__logo { /*logo for the nav leftmost side */
+  margin-left: 1rem;
+  font-size: 1.25rem;
+  color: var(--title-color);
+  font-weight: var(--font-semi-bold);
+  transition: color .4s;
+}
+
+.nav__actions { /*actions for the nav*/
+  display: flex;
+  align-items: center;
+  column-gap: 1rem;
+  margin-right: 1rem;
+}
+
+.nav__search, /*search for the nav*/
+.nav__login, /*login for the nav*/
+.nav__toggle, 
+.nav__close { /*close for the nav*/
+  font-size: 1.25rem;
+  color: var(--title-color);
+  cursor: pointer;
+  transition: color .4s;
+}
+
+.nav__login { /*login button for the nav*/
+  font-size: 1rem;
+  font-weight: var(--font-semi-bold);
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--first-color);
+  border-radius: 0.5rem;
+  background: transparent;
+  transition: all .4s;
+}
+
+:is(.nav__logo, .nav__search, .nav__login, .nav__toggle, .nav__link):hover { /*hover for the nav*/
+  color: var(--first-color);
+}
+
+/* Navigation for mobile devices */
+@media screen and (max-width: 1023px) {
+  .nav__menu {
+    position: fixed;
+    top: -100%;
+    left: 0;
+    background-color: var(--body-color);
+    box-shadow: 0 8px 16px hsla(230, 75%, 32%, .15);
+    width: 100%;
+    padding-block: 4.5rem 4rem;
+    transition: top .4s;
+  }
+}
+
+.nav__list { /*list for the nav*/
+  display: flex;
+  flex-direction: column;
+  row-gap: 2.5rem;
+  text-align: center;
+  list-style: none;
+}
+
+/* Desktop navigation */
+@media screen and (min-width: 1024px) {
+  .nav__list { /*list for the nav*/
+    flex-direction: row;
+    column-gap: 2.5rem;
+  }
+  
+  .nav__menu { /*menu for the nav*/
+    position: static;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    width: auto;
+  }
+  
+  .nav__toggle { /*toggle for the nav*/
+    display: none;
+  }
+}
+
+.nav__link { /*link for the nav*/
+  font-size: 1.25rem;
+  color: var(--title-color);
+  font-weight: var(--font-semi-bold);
+  transition: color .4s;
+}
+
+.nav__close { /*close for the nav*/
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+}
+
+/* Show menu */
+.show-menu { /*show menu for the nav*/
+  top: 0;
+}
+
+/*=============== HOME PAGE ===============*/
+.home-page {
+  min-height: calc(100vh - var(--header-height));
+  padding: 2rem 1rem;
+}
+
+.home-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: start;
+}
+
+/* Login Section */
+.login-section {
+  display: flex;
+  justify-content: center;
+}
+
+.login-container {
+  background: var(--body-color);
+  padding: 2rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px var(--first-color);
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-title {
+  font-size: 1.5rem;
+  font-weight: var(--font-semi-bold);
+  color: var(--title-color);
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label {
+  font-weight: var(--font-semi-bold);
+  color: var(--title-color);
+  font-size: 0.875rem;
+}
+
+.form-input {
+  padding: 0.75rem;
+  border: 2px solid hsla(230, 75%, 32%, .1);
+  border-radius: 0.25rem;
+  font-size: 1rem;
+  transition: border-color .4s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--first-color);
+}
+
+.login-button {
+  background: var(--first-color);
+  color: white;
+  border: none;
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 1rem;
+  font-weight: var(--font-semi-bold);
+  cursor: pointer;
+  transition: background .4s;
+  margin-top: 0.5rem;
+}
+
+.login-button:hover {
+  background: var(--hover-color);
+}
+
+.signup-link {
+  text-align: center;
+  color: var(--first-color);
+  text-decoration: none;
+  font-weight: var(--font-semi-bold);
+  padding: 0.5rem;
+  border: 2px solid var(--first-color);
+  border-radius: 0.25rem;
+  transition: all .4s;
+}
+
+.signup-link:hover {
+  background: var(--first-color);
+  color: white;
+}
+
+.login-help {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid hsla(230, 75%, 32%, .1);
+}
+
+.help-link {
+  color: var(--title-color);
+  text-decoration: none;
+  font-size: 0.875rem;
+  opacity: 0.8;
+  transition: opacity .4s;
+}
+
+.help-link:hover {
+  opacity: 1;
+  color: var(--first-color);
+}
+
+/* FAQ Section - Slideshow Style */
+.faq-section {
+  padding: 0 1rem;
+}
+
+.faq-title {
+  font-size: 1.5rem;
+  font-weight: var(--font-semi-bold);
+  color: var(--title-color);
+  margin-bottom: 2rem;
+}
+
+.faq-slideshow {
+  background: var(--body-color);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px hsla(230, 75%, 32%, .1);
+  padding: 2rem;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.faq-slide {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.faq-question {
+  font-size: 1.25rem;
+  font-weight: var(--font-semi-bold);
+  color: var(--title-color);
+  margin-bottom: 1rem;
+}
+
+.faq-answer {
+  color: var(--title-color);
+  opacity: 0.8;
+  line-height: 1.6;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.faq-navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid hsla(230, 75%, 32%, .1);
+}
+
+.faq-nav-btn {
+  background: var(--first-color);
+  color: white;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .4s;
+}
+
+.faq-nav-btn:hover {
+  background: var(--hover-color);
+  transform: scale(1.1);
+}
+
+.faq-nav-btn:disabled {
+  background: hsla(230, 75%, 32%, .3);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.faq-dots {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.faq-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  background: hsla(230, 75%, 32%, .3);
+  cursor: pointer;
+  transition: all .4s;
+}
+
+.faq-dot.active {
+  background: var(--first-color);
+  transform: scale(1.2);
+}
+
+.faq-dot:hover {
+  background: hsla(230, 75%, 32%, .6);
+}
+
+.faq-dot.active:hover {
+  background: var(--first-color);
+}
+
+/* Mobile Responsive for FAQ */
+@media screen and (max-width: 768px) {
+  .faq-slideshow {
+    padding: 1.5rem;
+    min-height: 250px;
+  }
+  
+  .faq-question {
+    font-size: 1.125rem;
+  }
+  
+  .faq-answer {
+    font-size: 0.9rem;
+  }
+  
+  .faq-nav-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+  }
+}
+
+/* Mobile Responsive */
+@media screen and (max-width: 768px) {
+  .home-container {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  
+  .login-container {
+    max-width: none;
+  }
+  
+  .faq-section {
+    padding: 0;
   }
 }

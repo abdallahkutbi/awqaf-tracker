@@ -1,4 +1,8 @@
+//The dashboard page for the awqaf tracker
+
+//imports
 import { API_BASE } from "@/lib/config";
+
 
 async function getSummary() {
   const res = await fetch(`${API_BASE}/waqf/wqf_1/summary`, { cache: "no-store" });
