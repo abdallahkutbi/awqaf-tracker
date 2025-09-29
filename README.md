@@ -38,10 +38,8 @@ It’s built as a learning project to showcase how fintech/payment-style infrast
 - `waqf` → endowment master data (`wagf_gov_id`, type, assets, authorized_national_ids)  
 - `beneficiaries` → recipients tied to a waqf  
 - `distribution_rules` → how waqf profits get split (percent or fixed)
-
-**Planned:**
 - `payouts` → log actual transfers to beneficiaries  
-- `past_profits` → keep multi-year profit history
+- `profits` → keep multi-year profit history
 
 ---
 

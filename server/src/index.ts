@@ -35,6 +35,44 @@ const app = express();
 app.use(cors({ origin: "http://localhost:3000" }));
 app.use(express.json());
 
+// ------- MIGRATIONS (lightweight) -------
+try {
+  const bcols = db.prepare(`PRAGMA table_info(beneficiaries)`).all() as Array<{ name: string }>;
+  if (!bcols.some(c => c.name === "percent_share")) {
+    db.exec(`ALTER TABLE beneficiaries ADD COLUMN percent_share REAL`);
+  }
+} catch {}
+
+try {
+  // Profits table baseline (no-op if exists)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS profits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      waqf_gov_id INTEGER NOT NULL,
+      profit_amount INTEGER NOT NULL,
+      currency TEXT DEFAULT 'USD',
+      profit_period_start TEXT NOT NULL,
+      profit_period_end TEXT,
+      status TEXT DEFAULT 'allocated',
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  const pcols = db.prepare(`PRAGMA table_info(profits)`).all() as Array<{ name: string }>;
+  const need = (n: string) => !pcols.some(c => c.name === n);
+  if (need('currency')) db.exec(`ALTER TABLE profits ADD COLUMN currency TEXT DEFAULT 'USD'`);
+  if (need('profit_period_end')) db.exec(`ALTER TABLE profits ADD COLUMN profit_period_end TEXT`);
+  if (need('status')) db.exec(`ALTER TABLE profits ADD COLUMN status TEXT DEFAULT 'allocated'`);
+  if (need('notes')) db.exec(`ALTER TABLE profits ADD COLUMN notes TEXT`);
+} catch {}
+
+try {
+  const wcols = db.prepare(`PRAGMA table_info(waqf)`).all() as Array<{ name: string }>;
+  if (!wcols.some(c => c.name === 'current_year_profit_id')) {
+    db.exec(`ALTER TABLE waqf ADD COLUMN current_year_profit_id INTEGER`);
+  }
+} catch {}
+
 // ------- DEBUG -------
 //db debug (commented out for now)
 app.get("/debug/db", (_req, res) => {
@@ -96,18 +134,55 @@ app.post("/auth/login", (req, res) => {
 
     const byEmail = typeof email === "string";
     const user = byEmail
-      ? db.prepare(`SELECT id, email, password_hash FROM users WHERE email = ?`)
-          .get(String(email).trim().toLowerCase()) as User | undefined
-      : db.prepare(`SELECT id, email, password_hash FROM users WHERE national_id = ?`)
-          .get(String(nationalId).trim()) as User | undefined;
+      ? db.prepare(`SELECT id, email, password_hash, national_id, name FROM users WHERE email = ?`)
+          .get(String(email).trim().toLowerCase()) as { id: number; email: string; password_hash: string; national_id: string; name: string | null } | undefined
+      : db.prepare(`SELECT id, email, password_hash, national_id, name FROM users WHERE national_id = ?`)
+          .get(String(nationalId).trim()) as { id: number; email: string; password_hash: string; national_id: string; name: string | null } | undefined;
 
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     const ok = bcrypt.compareSync(String(password), user.password_hash);
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-    return res.json({ userId: user.id, email: user.email });
+    return res.json({ userId: user.id, email: user.email, nationalId: user.national_id, name: user.name });
   });
+
+// ------- USER PROFILE -------
+app.get("/users/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    const row = db.prepare(`
+      SELECT id, email, name, national_id, created_at FROM users WHERE id = ?
+    `).get(id) as { id: number; email: string; name: string | null; national_id: string; created_at: string } | undefined;
+    if (!row) return res.status(404).json({ error: "User not found" });
+    res.json(row);
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to fetch user" });
+  }
+});
+
+app.put("/users/:id", (req, res) => {
+  const { id } = req.params;
+  const { email, name, password } = req.body || {};
+  try {
+    let passwordHash: string | undefined;
+    if (password) passwordHash = bcrypt.hashSync(String(password), 10);
+    const info = db.prepare(`
+      UPDATE users
+      SET email = COALESCE(?, email),
+          name = COALESCE(?, name),
+          password_hash = COALESCE(?, password_hash)
+      WHERE id = ?
+    `).run(email ? String(email).trim().toLowerCase() : null, name ?? null, passwordHash ?? null, id);
+    if (info.changes === 0) return res.status(404).json({ error: "User not found" });
+    const updated = db.prepare(`SELECT id, email, name, national_id FROM users WHERE id = ?`).get(id);
+    res.json({ message: "User updated", user: updated });
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (msg.includes("users.email")) return res.status(409).json({ error: "Email already exists" });
+    res.status(500).json({ error: "Failed to update user" });
+  }
+});
 
 // ------- WAQF MANAGEMENT -------
 // Get all waqf records for a user (by national ID)
@@ -280,7 +355,22 @@ app.get("/waqf/:govId/beneficiaries", (req, res) => {
   
   try {
     const beneficiaries = db.prepare(`
-      SELECT b.*, w.waqf_name 
+      SELECT 
+        b.*, 
+        w.waqf_name,
+        w.asset_kind,
+        w.asset_label,
+        COALESCE(
+          b.percent_share,
+          (
+            SELECT COALESCE(SUM(dr.share_value), 0)
+            FROM distribution_rules dr
+            WHERE dr.waqf_gov_id = b.waqf_gov_id
+              AND dr.beneficiary_id = b.id
+              AND dr.share_type = 'percent'
+              AND (dr.valid_to IS NULL OR dr.valid_to >= date('now'))
+          )
+        ) AS percent_share
       FROM beneficiaries b
       JOIN waqf w ON b.waqf_gov_id = w.waqf_gov_id
       WHERE b.waqf_gov_id = ? AND b.is_active = 1
@@ -720,6 +810,61 @@ app.get("/waqf/:govId/profits", (req, res) => {
   }
 });
 
+// ------- DEV: SEED PROFITS (YEARLY) -------
+app.post("/dev/waqf/:govId/seed-profits", (req, res) => {
+  const { govId } = req.params;
+  const { fromYear = 2019, toYear = new Date().getFullYear() - 1 } = req.body || {};
+
+  try {
+    const w = db.prepare(`
+      SELECT waqf_gov_id, asset_kind, asset_label, corpus_usd, last_year_profit_usd
+      FROM waqf WHERE waqf_gov_id = ? LIMIT 1
+    `).get(govId) as { waqf_gov_id: number; asset_kind: string; asset_label: string | null; corpus_usd: number; last_year_profit_usd: number | null } | undefined;
+    if (!w) return res.status(404).json({ error: "Waqf not found" });
+
+    // Remove any existing yearly rows in the range (idempotent seed)
+    const pcols = db.prepare(`PRAGMA table_info(profits)`).all() as Array<{ name: string }>;
+    const hasAssetKind = pcols.some(c => c.name === 'asset_kind');
+    const hasAssetLabel = pcols.some(c => c.name === 'asset_label');
+    if (hasAssetKind) {
+      db.prepare(`
+        DELETE FROM profits
+        WHERE waqf_gov_id = ? AND asset_kind = ?
+          AND strftime('%Y', profit_period_start) BETWEEN ? AND ?
+      `).run(govId, w.asset_kind, String(fromYear), String(toYear));
+    } else {
+      db.prepare(`
+        DELETE FROM profits
+        WHERE waqf_gov_id = ?
+          AND strftime('%Y', profit_period_start) BETWEEN ? AND ?
+      `).run(govId, String(fromYear), String(toYear));
+    }
+
+    const base = Number(w.last_year_profit_usd ?? Math.round(w.corpus_usd * 0.04));
+    const insertSql = hasAssetKind
+      ? `INSERT INTO profits (
+           waqf_gov_id, asset_kind, asset_label, profit_amount, currency, profit_period_start, profit_period_end, status, notes
+         ) VALUES (?, ?, ?, ?, 'USD', ?, ?, 'distributed', ?)`
+      : `INSERT INTO profits (
+           waqf_gov_id, profit_amount, currency, profit_period_start, profit_period_end, status, notes
+         ) VALUES (?, ?, 'USD', ?, ?, 'distributed', ?)`;
+    const insert = db.prepare(insertSql);
+
+    for (let year = Number(fromYear); year <= Number(toYear); year++) {
+      const variance = 0.2 * base; // ±20%
+      const val = Math.max(0, Math.round(base + (Math.random() * 2 - 1) * variance));
+      const start = `${year}-01-01`;
+      const end = `${year}-12-31`;
+      if (hasAssetKind) insert.run(govId, w.asset_kind, w.asset_label ?? null, val, start, end, `Seeded yearly profit for ${year}`);
+      else insert.run(govId, val, start, end, `Seeded yearly profit for ${year}`);
+    }
+
+    res.json({ message: "Seeded profits", govId, fromYear, toYear });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to seed profits", details: String(e?.message || e) });
+  }
+  });
+
 // ------- HEALTH + ROOT -------
 app.get("/", (_req, res) =>
   res.type("text/plain").send("Awqaf Tracker API is running. Try GET /health")
@@ -734,7 +879,7 @@ app.get("/waqf/:id/summary", (req, res) => {
   try {
     // Get waqf basic info
     const waqf = db.prepare(`
-      SELECT waqf_gov_id, waqf_name, corpus_usd, last_year_profit_usd, created_at
+      SELECT waqf_gov_id, waqf_name, corpus_usd, last_year_profit_usd, current_year_profit_id, created_at
       FROM waqf 
       WHERE waqf_gov_id = ?
     `).get(id) as {
@@ -742,6 +887,7 @@ app.get("/waqf/:id/summary", (req, res) => {
       waqf_name: string;
       corpus_usd: number;
       last_year_profit_usd: number | null;
+      current_year_profit_id: number | null;
       created_at: string;
     } | undefined;
 
@@ -767,17 +913,24 @@ app.get("/waqf/:id/summary", (req, res) => {
     const totalPayouts = db.prepare(`
       SELECT COALESCE(SUM(amount_usd), 0) as total
       FROM payouts 
-      WHERE waqf_gov_id = ? AND status = 'completed'
+      WHERE waqf_gov_id = ?
+        AND status = 'completed'
+        AND strftime('%Y', payout_date) = strftime('%Y', 'now')
     `).get(id) as { total: number };
 
-    // Get current year profit
-    const currentYearProfit = db.prepare(`
-      SELECT COALESCE(SUM(profit_amount), 0) as total
-      FROM profits 
-      WHERE waqf_gov_id = ? 
-        AND profit_period_start >= date('now', 'start of year')
-        AND status = 'pending'
-    `).get(id) as { total: number };
+    // Get current year profit (from FK if set; otherwise aggregate current year distributed/allocated)
+    let currentYearProfit = db.prepare(`
+      SELECT profit_amount as total FROM profits WHERE id = ?
+    `).get(waqf.current_year_profit_id) as { total: number } | undefined;
+    if (!currentYearProfit) {
+      currentYearProfit = db.prepare(`
+        SELECT COALESCE(SUM(profit_amount), 0) as total
+        FROM profits 
+        WHERE waqf_gov_id = ? 
+          AND strftime('%Y', profit_period_start) = strftime('%Y', 'now')
+          AND status IN ('allocated','distributed','pending')
+      `).get(id) as { total: number };
+    }
 
     // Get this month's payouts
     const thisMonthPayouts = db.prepare(`
@@ -797,13 +950,14 @@ app.get("/waqf/:id/summary", (req, res) => {
         AND status IN ('allocated', 'distributed')
     `).get(id) as { total: number };
 
-    res.json({
+  res.json({
       waqfId: waqf.waqf_gov_id,
       waqfName: waqf.waqf_name,
       totals: {
         corpus: waqf.corpus_usd,
-        lastYearProfit: waqf.last_year_profit_usd || 0,
-        totalPayouts: totalPayouts.total,
+        lastYearProfit: currentYearProfit?.total || 0,
+        totalPayouts: currentYearProfit?.total || 0,
+        executedPayouts: totalPayouts.total,
         beneficiaries: beneficiaryCount.count,
         distributionRules: distributionRulesCount.count
       },
@@ -812,11 +966,56 @@ app.get("/waqf/:id/summary", (req, res) => {
         outflow: thisMonthPayouts.total
       },
       pending: {
-        currentYearProfit: currentYearProfit.total
+        currentYearProfit: currentYearProfit.total,
+        pendingPayout: Math.max(0, (currentYearProfit?.total || 0) - (totalPayouts?.total || 0))
       }
     });
   } catch (e: any) {
     res.status(500).json({ error: "Failed to fetch waqf summary" });
+  }
+});
+
+// ------- DEV: BACKFILL current_year_profit_id FOR ALL WAQFS -------
+app.post("/dev/backfill-current-year-profit", (_req, res) => {
+  try {
+    const year = new Date().getFullYear();
+    const waqfs = db.prepare(`SELECT waqf_gov_id FROM waqf`).all() as Array<{ waqf_gov_id: number }>;
+    const findProfit = db.prepare(`
+      SELECT id FROM profits
+      WHERE waqf_gov_id = ? AND strftime('%Y', profit_period_start) = ?
+      ORDER BY profit_period_start DESC, id DESC LIMIT 1
+    `);
+    const upd = db.prepare(`UPDATE waqf SET current_year_profit_id = ? WHERE waqf_gov_id = ?`);
+    let updated = 0;
+    for (const w of waqfs) {
+      const row = findProfit.get(w.waqf_gov_id, String(year)) as { id: number } | undefined;
+      if (row?.id != null) {
+        upd.run(row.id, w.waqf_gov_id);
+        updated++;
+      }
+    }
+    res.json({ message: "Backfilled current_year_profit_id", year, waqfs: waqfs.length, updated });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to backfill", details: String(e?.message || e) });
+  }
+});
+
+// ------- DEV: RESET CURRENT YEAR PAYOUTS (SET TO 0 + PENDING) -------
+app.post("/dev/waqf/:govId/reset-current-year-payouts", (req, res) => {
+  const { govId } = req.params;
+  try {
+    const info = db.prepare(`
+      UPDATE payouts
+      SET amount_usd = 0,
+          status = 'pending',
+          reference_number = NULL,
+          completed_at = NULL
+      WHERE waqf_gov_id = ?
+        AND strftime('%Y', payout_date) = strftime('%Y', 'now')
+    `).run(govId);
+    res.json({ message: "Reset current-year payouts to 0 and pending", govId, rows: info.changes });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to reset payouts", details: String(e?.message || e) });
   }
 });
 

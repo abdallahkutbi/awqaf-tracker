@@ -5,6 +5,7 @@
 //imports
 import "./globals.css";
 import { Metadata } from "next";
+import NavLinks from "./components/NavLinks";
 
 export const metadata: Metadata = {
   title: "Awqaf Tracker",
@@ -19,25 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="header">
           <nav className="nav">
             <a href="/" className="nav__logo">Awqaf Tracker</a>
-            
-            <div className="nav__menu" id="nav-menu">
-              <ul className="nav__list">
-                <li className="nav__item">
-                  <a href="/" className="nav__link">Home</a>
-                </li>
-                <li className="nav__item">
-                  <a href="/dashboard" className="nav__link">Dashboard</a>
-                </li>
-                <li className="nav__item">
-                  <a href="/profile" className="nav__link">Profile</a>
-                </li>
-              </ul>
-            </div>
-
-            <div className="nav__actions">
-              <a href="/login" className="nav__login">Login</a>
-              <i className="nav__toggle" id="nav-toggle">☰</i>
-            </div>
+            <NavLinks />
           </nav>
         </header>
         {children}

@@ -18,4 +18,28 @@ db.exec(`
   );
 `);
 
+// Profits table (if missing)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS profits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    waqf_gov_id INTEGER NOT NULL,
+    profit_amount INTEGER NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    profit_period_start TEXT NOT NULL,
+    profit_period_end TEXT,
+    status TEXT DEFAULT 'allocated',
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+// Add percent_share to beneficiaries if not present
+try {
+  const cols = db.prepare(`PRAGMA table_info(beneficiaries)`).all() as Array<{ name: string }>;
+  const hasPercent = Array.isArray(cols) && cols.some(c => c.name === "percent_share");
+  if (!hasPercent) {
+    db.exec(`ALTER TABLE beneficiaries ADD COLUMN percent_share REAL`);
+  }
+} catch {}
+
 export default db;

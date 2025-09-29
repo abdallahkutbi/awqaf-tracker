@@ -47,8 +47,24 @@ export default function SignupPage() {
         setMsg(data.error || "Sign up failed");
         return;
       }
-      // success → go to the dashboard start (where they will enter a waqf govId)
-      r.push("/dashboard");
+      // Store user for nav gating
+      try {
+        localStorage.setItem("awqaf_user", JSON.stringify({
+          userId: data.userId,
+          email: form.email,
+          nationalId: form.nationalId,
+          name: form.name || undefined,
+        }));
+        window.dispatchEvent(new Event("awqaf_user_changed"));
+      } catch {}
+      // redirect using authorized waqfs if present
+      const authorized = Array.isArray(data.authorizedWaqfs) ? data.authorizedWaqfs : [];
+      if (authorized.length > 0 && authorized[0]?.waqf_gov_id) {
+        r.push(`/dashboard?govId=${encodeURIComponent(String(authorized[0].waqf_gov_id))}`);
+        return;
+      }
+      // fallback to waqf list by nationalId
+      r.push(`/waqf?nationalId=${encodeURIComponent(form.nationalId)}`);
     } catch (err: any) {
       setMsg(err?.message || "Network error");
     } finally {
