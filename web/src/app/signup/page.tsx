@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+import { API_BASE } from "@/lib/config";
 
 export default function SignupPage() {
   const r = useRouter();
@@ -34,7 +33,7 @@ export default function SignupPage() {
     try {
       const res = await fetch(`${API_BASE}/auth/signup`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           email: form.email,
           password: form.password,
@@ -42,9 +41,19 @@ export default function SignupPage() {
           name: form.name || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setMsg(data.error || "Sign up failed");
+
+      let raw = "";
+      let data: any = null;
+      try {
+        raw = await res.text();
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        console.warn("Signup non-JSON response:", raw);
+      }
+
+      if (!res.ok || !data) {
+        setMsg(`HTTP ${res.status}: ${((data && data.error) || raw || "empty response")}`);
+        setLoading(false);
         return;
       }
       // Store user for nav gating
