@@ -157,15 +157,15 @@ export default function Page() {
     },
     {
       question: "What type of assets can be used to create a waqf?",
-      answer: "Any asset that can be used to generate income can be used to create a waqf. This includes real estate, stocks, bonds, and other investments."
+      answer: "Any asset that can be used to generate income can be used to create a waqf.\n This includes real estate, stocks, bonds, and other investments."
     },
     {
       question: "what does waqf tracker do?",
-      answer: "Waqf tracker is a platform that helps manage and track waqf funds with complete transparency and accountability. this includes tracking the profits of an asset, the beneficiaries of the profits, and the distribution of the profits."
+      answer: "Waqf tracker is a platform that helps manage and track waqf funds with complete transparency and accountability.\n this includes tracking the profits of an asset, the beneficiaries of the profits, and the distribution of the profits."
     },
     {
       question: "How does waqf tracker work?",
-      answer: "waqf trackeer works by using the regisrterd govermennt id of the waqf to gather information about the waqfs corpus and authorized representatives. benficeries are added through waqf tracker and payouts are made to the beneficiaries."
+      answer: "waqf trackeer works by using the regisrterd govermennt id of the waqf to gather information about the waqfs corpus and authorized representatives.\n benficeries are added through waqf tracker and payouts are made to the beneficiaries."
     },
     {
       question: "how can the bank that owns waqf tracker benefit from this?",
@@ -416,7 +416,7 @@ export default function Page() {
           <div className="faq-slideshow">
             <div className="faq-slide">
               <h3 className="faq-question">{faqData[currentFaqIndex].question}</h3>
-              <p className="faq-answer">{faqData[currentFaqIndex].answer}</p>
+              <p className="faq-answer" style={{ whiteSpace: "pre-line" }}>{faqData[currentFaqIndex].answer}</p>
             </div>
             
             <div className="faq-navigation">
