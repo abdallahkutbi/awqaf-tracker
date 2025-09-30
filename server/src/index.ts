@@ -32,7 +32,10 @@ interface Waqf {
 const app = express();
 
 // ------- MIDDLEWARE -------
-app.use(cors({ origin: "http://localhost:3000" }));
+app.use(cors({ 
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true 
+}));
 app.use(express.json());
 
 // ------- MIGRATIONS (lightweight) -------
@@ -1254,4 +1257,70 @@ app.delete("/payouts/:id", (req, res) => {
 const PORT = Number(process.env.PORT || 4000);
 app.listen(PORT, () => {
   console.log(`API running at http://localhost:${PORT}`);
+});
+
+app.get("/dev/waqf-payout-status", (req, res) => {
+  try {
+    const waqfs = db.prepare(`
+      SELECT 
+        w.waqf_gov_id,
+        w.waqf_name,
+        w.waqf_type,
+        w.asset_kind,
+        w.asset_label,
+        COALESCE(w.last_year_profit_usd, 0) as current_year_profit,
+        COALESCE((
+          SELECT SUM(p.amount_usd) 
+          FROM payouts p 
+          WHERE p.waqf_gov_id = w.waqf_gov_id 
+            AND p.status = 'completed'
+            AND strftime('%Y', p.payout_date) = strftime('%Y', 'now')
+        ), 0) as executed_payouts,
+        COALESCE((
+          SELECT COUNT(*) 
+          FROM beneficiaries b 
+          WHERE b.waqf_gov_id = w.waqf_gov_id 
+            AND b.is_active = 1
+        ), 0) as beneficiary_count
+      FROM waqf w
+      ORDER BY w.waqf_gov_id
+    `).all();
+
+    const result = waqfs.map(waqf => {
+      const pending_payout = Math.max(0, waqf.current_year_profit - waqf.executed_payouts);
+      const is_fully_paid = waqf.current_year_profit > 0 && waqf.executed_payouts >= waqf.current_year_profit;
+      const has_partial_payouts = waqf.executed_payouts > 0 && !is_fully_paid;
+      
+      let status;
+      if (is_fully_paid) {
+        status = "✅ Fully Paid";
+      } else if (has_partial_payouts) {
+        status = "🟡 Partial Payouts";
+      } else {
+        status = "🔴 No Payouts";
+      }
+
+      return {
+        waqf_gov_id: waqf.waqf_gov_id,
+        waqf_name: waqf.waqf_name,
+        status: status,
+        current_year_profit: waqf.current_year_profit,
+        executed_payouts: waqf.executed_payouts,
+        pending_payout: pending_payout,
+        beneficiary_count: waqf.beneficiary_count
+      };
+    });
+
+    res.json({
+      summary: {
+        total_waqfs: result.length,
+        fully_paid: result.filter(w => w.status === "✅ Fully Paid").length,
+        partial_payouts: result.filter(w => w.status === "🟡 Partial Payouts").length,
+        no_payouts: result.filter(w => w.status === "🔴 No Payouts").length
+      },
+      waqfs: result
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to fetch waqf payout status" });
+  }
 });
