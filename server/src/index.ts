@@ -1284,7 +1284,16 @@ app.get("/dev/waqf-payout-status", (req, res) => {
         ), 0) as beneficiary_count
       FROM waqf w
       ORDER BY w.waqf_gov_id
-    `).all();
+    `).all() as Array<{
+      waqf_gov_id: number;
+      waqf_name: string;
+      waqf_type: string;
+      asset_kind: string;
+      asset_label: string;
+      current_year_profit: number;
+      executed_payouts: number;
+      beneficiary_count: number;
+    }>;
 
     const result = waqfs.map(waqf => {
       const pending_payout = Math.max(0, waqf.current_year_profit - waqf.executed_payouts);
