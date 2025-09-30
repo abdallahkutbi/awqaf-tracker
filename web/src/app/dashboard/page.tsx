@@ -3,6 +3,7 @@
 //The dashboard page for the awqaf tracker
 
 //imports
+import { Suspense } from "react";
 import { API_BASE } from "@/lib/config";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -17,7 +18,7 @@ type Summary = {
 };
 
 
-export default function DashboardPage() {
+function DashboardInner() {
   const searchParams = useSearchParams();
   const govId = searchParams.get("govId");
   const nationalId = searchParams.get("nationalId");
@@ -181,5 +182,13 @@ export default function DashboardPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DashboardInner />
+    </Suspense>
   );
 }

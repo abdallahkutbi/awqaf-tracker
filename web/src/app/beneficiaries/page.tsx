@@ -1,6 +1,6 @@
 "use client";
 import { API_BASE } from "@/lib/config";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 type Beneficiary = {
@@ -13,6 +13,14 @@ type Beneficiary = {
 };
 
 export default function BeneficiariesPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <BeneficiariesInner />
+    </Suspense>
+  );
+}
+
+function BeneficiariesInner() {
   const sp = useSearchParams();
   const r = useRouter();
   const govId = sp.get("govId") || "";

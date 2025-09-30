@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_BASE } from "@/lib/config";
 
@@ -34,7 +34,7 @@ type Waqf = {
   last_year_profit_usd: number;
 };
 
-export default function PayoutSelectPage() {
+function PayoutSelectInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const govId = searchParams.get("govId");
@@ -291,5 +291,13 @@ export default function PayoutSelectPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+export default function PayoutSelectPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PayoutSelectInner />
+    </Suspense>
   );
 }

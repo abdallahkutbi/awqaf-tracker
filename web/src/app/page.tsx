@@ -5,11 +5,11 @@
 
 //imports
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_BASE } from "@/lib/config";
 
-export default function Page() {
+function HomeInner() {
   const [currentFaqIndex, setCurrentFaqIndex] = useState(0);
   const r = useRouter();
   const sp = useSearchParams();
@@ -451,5 +451,13 @@ export default function Page() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div/>}>
+      <HomeInner />
+    </Suspense>
   );
 }
