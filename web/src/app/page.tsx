@@ -150,6 +150,12 @@ function HomeInner() {
   const maxValue = useMemo(() => graphData.reduce((m, d) => Math.max(m, d.value), 0) || 1, [graphData]);
   const fmt = (n: number) => Number(n).toLocaleString();
 
+  const currentYear = new Date().getFullYear();
+  const currYearProfit = useMemo(() => {
+    const row = yearly.find(s => s.year === currentYear);
+    return Number(row?.total || 0);
+  }, [yearly, currentYear]);
+
   const faqData = [
     {
       question: "What is a waqf?",
@@ -275,11 +281,12 @@ function HomeInner() {
                 <div style={{ border: "1px solid #ddd", padding: 12 }}>
                   <b>Current Year Profit</b>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 22, marginTop: 6 }}>
-                    <span>${fmt(summary.totals.lastYearProfit)}</span>
+                    <span>${fmt(currYearProfit)}</span>
                     {prevYearProfit !== null && (
                       (() => {
-                        const diff = summary.totals.lastYearProfit - prevYearProfit;
-                        const pct = prevYearProfit === 0 ? 0 : (diff / prevYearProfit) * 100;
+                        const base = Number(prevYearProfit || 0);
+                        const diff = currYearProfit - base;
+                        const pct = base === 0 ? 0 : (diff / base) * 100;
                         const up = diff >= 0;
                         return (
                           <span style={{ color: up ? '#2e7d32' : '#c62828', fontSize: 16 }}>
