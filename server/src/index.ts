@@ -32,9 +32,22 @@ interface Waqf {
 const app = express();
 
 // ------- MIDDLEWARE -------
-app.use(cors({ 
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
-  credentials: true 
+function normalize(u?: string) {
+  return (u || "").replace(/\/$/, ""); // trim trailing slash
+}
+
+const allowed = new Set([
+  normalize(process.env.FRONTEND_URL),     // your prod Vercel URL, no trailing slash
+  "http://localhost:3000"
+]);
+
+app.use(cors({
+  origin: (origin, cb) => {
+    const o = origin ? origin.replace(/\/$/, "") : "";
+    if (!o || allowed.has(o) || /\.vercel\.app$/.test(o)) return cb(null, true); // allow all Vercel previews
+    cb(new Error("CORS"));
+  },
+  credentials: true
 }));
 app.use(express.json());
 
