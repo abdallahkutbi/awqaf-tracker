@@ -881,6 +881,80 @@ app.post("/dev/waqf/:govId/seed-profits", (req, res) => {
   }
   });
 
+// Seed profits for ALL waqfs across a year range (default: 2019..last year)
+app.post("/dev/seed-profits-all", (req, res) => {
+  try {
+    const { fromYear = 2019, toYear = new Date().getFullYear() - 1 } = req.body || {};
+    const waqfs = db.prepare(`
+      SELECT waqf_gov_id, asset_kind, asset_label, corpus_usd, last_year_profit_usd
+      FROM waqf
+    `).all() as Array<{ waqf_gov_id: number; asset_kind: string; asset_label: string | null; corpus_usd: number; last_year_profit_usd: number | null }>;
+
+    const pcols = db.prepare(`PRAGMA table_info(profits)`).all() as Array<{ name: string }>;
+    const hasAssetKind = pcols.some(c => c.name === 'asset_kind');
+    const hasAssetLabel = pcols.some(c => c.name === 'asset_label');
+
+    const insertSql = hasAssetKind
+      ? `INSERT INTO profits (
+           waqf_gov_id, asset_kind, asset_label, profit_amount, currency, profit_period_start, profit_period_end, status, notes
+         ) VALUES (?, ?, ?, ?, 'USD', ?, ?, 'distributed', ?)`
+      : `INSERT INTO profits (
+           waqf_gov_id, profit_amount, currency, profit_period_start, profit_period_end, status, notes
+         ) VALUES (?, ?, 'USD', ?, ?, 'distributed', ?)`;
+    const insert = db.prepare(insertSql);
+
+    let seededRows = 0;
+    for (const w of waqfs) {
+      // idempotent remove existing yearly rows in range
+      if (hasAssetKind) {
+        db.prepare(`
+          DELETE FROM profits
+          WHERE waqf_gov_id = ? AND asset_kind = ?
+            AND strftime('%Y', profit_period_start) BETWEEN ? AND ?
+        `).run(w.waqf_gov_id, w.asset_kind, String(fromYear), String(toYear));
+      } else {
+        db.prepare(`
+          DELETE FROM profits
+          WHERE waqf_gov_id = ?
+            AND strftime('%Y', profit_period_start) BETWEEN ? AND ?
+        `).run(w.waqf_gov_id, String(fromYear), String(toYear));
+      }
+
+      const base = Number(w.last_year_profit_usd ?? Math.round(w.corpus_usd * 0.08));
+      for (let year = Number(fromYear); year <= Number(toYear); year++) {
+        const variance = 0.2 * base; // ±20%
+        const val = Math.max(1, Math.round(base + (Math.random() * 2 - 1) * variance));
+        const start = `${year}-01-01`;
+        const end = `${year}-12-31`;
+        if (hasAssetKind) insert.run(w.waqf_gov_id, w.asset_kind, w.asset_label ?? null, val, start, end, `Seeded yearly profit for ${year}`);
+        else insert.run(w.waqf_gov_id, val, start, end, `Seeded yearly profit for ${year}`);
+        seededRows++;
+      }
+    }
+
+    res.json({ message: "Seeded profits for all waqfs", waqfs: waqfs.length, rows: seededRows, fromYear, toYear });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to seed profits for all", details: String(e?.message || e) });
+  }
+});
+
+// Reset current-year payouts for ALL waqfs so pending > 0 (makes payouts unpaid)
+app.post("/dev/reset-current-year-payouts-all", (_req, res) => {
+  try {
+    const info = db.prepare(`
+      UPDATE payouts
+      SET amount_usd = 0,
+          status = 'pending',
+          reference_number = NULL,
+          completed_at = NULL
+      WHERE strftime('%Y', payout_date) = strftime('%Y', 'now')
+    `).run();
+    res.json({ message: "Reset current-year payouts for all waqfs", rows: info.changes });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to reset payouts for all", details: String(e?.message || e) });
+  }
+});
+
 // ------- HEALTH + ROOT -------
 app.get("/", (_req, res) =>
   res.type("text/plain").send("Awqaf Tracker API is running. Try GET /health")
