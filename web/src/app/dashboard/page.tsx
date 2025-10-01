@@ -17,6 +17,18 @@ type Summary = {
   pending: { currentYearProfit: number; pendingPayout: number };
 };
 
+type PayoutStatus = {
+  waqf_gov_id: number;
+  profit_year: number;
+  payout_year: number;
+  totals: {
+    profit_total: number;
+    executed_payouts: number;
+    pending_payout: number;
+  };
+  status: string;
+};
+
 
 function DashboardInner() {
   const searchParams = useSearchParams();
@@ -24,29 +36,50 @@ function DashboardInner() {
   const nationalId = searchParams.get("nationalId");
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [payoutStatus, setPayoutStatus] = useState<PayoutStatus | null>(null);
+
+  const fetchData = async () => {
+    if (!govId) {
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/waqf/${encodeURIComponent(govId)}/summary`, { cache: "no-store" });
+      if (res.ok) {
+        const summaryData = await res.json();
+        setData(summaryData);
+      }
+      // Also fetch last-year payout status (server defaults to last year)
+      const st = await fetch(`${API_BASE}/waqf/${encodeURIComponent(govId)}/payout-status`, { cache: "no-store" });
+      if (st.ok) {
+        const statusJson = await st.json();
+        setPayoutStatus(statusJson);
+      }
+    } catch (error) {
+      console.error("Error fetching summary/status:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!govId) {
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        const res = await fetch(`${API_BASE}/waqf/${encodeURIComponent(govId)}/summary`, { cache: "no-store" });
-        if (res.ok) {
-          const summaryData = await res.json();
-          setData(summaryData);
-        }
-      } catch (error) {
-        console.error("Error fetching summary:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [govId]);
+
+  // Refresh data when returning from payout processing
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('success')) {
+      // Refresh data after successful payout processing
+      fetchData();
+      // Clean up URL
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('success');
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  }, []);
 
   if (loading) {
     return <div>Loading...</div>;
@@ -137,24 +170,25 @@ function DashboardInner() {
           <div>${Number(data.totals.lastYearProfit).toLocaleString()}</div>
         </div>
         {(() => {
+          // Prefer server-computed last-year status if available
+          if (payoutStatus) {
+            const label = payoutStatus.status;
+            const color = label.includes("✅") ? "#2e7d32" : label.includes("🟡") ? "#ff9800" : label.includes("🔴") ? "#c62828" : "#555";
+            return (
+              <div style={{ border: "1px solid #ddd", padding: 12 }}>
+                <b>Last-Year Status:</b>
+                <div style={{ color }}>{label}</div>
+                <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>Profit {payoutStatus.profit_year} • Payouts {payoutStatus.payout_year}</div>
+              </div>
+            );
+          }
+          // Fallback to local computation from summary
           const currentProfit = Number(data.totals.lastYearProfit || 0);
           const completedPayouts = Number(data.totals.executedPayouts || 0);
-          const remainingBalance = Math.max(0, currentProfit - completedPayouts);
           const isFullyPaid = currentProfit > 0 && completedPayouts >= currentProfit;
           const hasPartialPayouts = completedPayouts > 0 && !isFullyPaid;
-          
-          let statusLabel, statusColor;
-          if (isFullyPaid) {
-            statusLabel = "All amount paid out";
-            statusColor = "#2e7d32";
-          } else if (hasPartialPayouts) {
-            statusLabel = "Remaining balance not paid out";
-            statusColor = "#ff9800";
-          } else {
-            statusLabel = "Pending payout to beneficiaries";
-            statusColor = "#c62828";
-          }
-          
+          let statusLabel = isFullyPaid ? "All amount paid out" : hasPartialPayouts ? "Remaining balance not paid out" : "Pending payout to beneficiaries";
+          let statusColor = isFullyPaid ? "#2e7d32" : hasPartialPayouts ? "#ff9800" : "#c62828";
           return (
             <div style={{ border: "1px solid #ddd", padding: 12 }}>
               <b>Status:</b>
@@ -163,10 +197,21 @@ function DashboardInner() {
           );
         })()}
         {(() => {
-          const currentProfit = Number(data.totals.lastYearProfit || 0);
+          if (payoutStatus) {
+            const pending = Number(payoutStatus.totals.pending_payout || 0);
+            return (
+              <div style={{ border: "1px solid #ddd", padding: 12 }}>
+                <b>To Be Paid Out:</b>
+                <div style={{ color: pending > 0 ? "#c62828" : "#2e7d32" }}>
+                  ${pending.toLocaleString()}
+                </div>
+              </div>
+            );
+          }
+          // Use totalPayouts field which now contains the "To Be Paid Out" amount
+          const toBePaidOut = Number(data.totals.totalPayouts || 0);
           const completedPayouts = Number(data.totals.executedPayouts || 0);
-          const remainingBalance = Math.max(0, currentProfit - completedPayouts);
-          
+          const remainingBalance = Math.max(0, toBePaidOut - completedPayouts);
           return (
             <div style={{ border: "1px solid #ddd", padding: 12 }}>
               <b>To Be Paid Out:</b>

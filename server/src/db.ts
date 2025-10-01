@@ -1,8 +1,15 @@
 import Database from "better-sqlite3";
 import dotenv from "dotenv";
+import path from "path";
 dotenv.config(); 
 
-export const DB_PATH = process.env.SQLITE_PATH || "db.sqlite";
+// In production (Railway), use /app/data/db.sqlite
+// In development, use ../awqaf-tracker.db
+export const DB_PATH = process.env.SQLITE_PATH || 
+  (process.env.NODE_ENV === 'production' 
+    ? path.resolve(process.cwd(), "data", "db.sqlite")
+    : path.resolve(process.cwd(), "..", "awqaf-tracker.db"));
+
 const db = new Database(DB_PATH);
 db.pragma("foreign_keys = ON");
 
