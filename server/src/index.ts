@@ -925,7 +925,7 @@ app.get("/waqf/:id/summary", (req, res) => {
       WHERE waqf_gov_id = ? AND (valid_to IS NULL OR valid_to >= date('now'))
     `).get(id) as { count: number };
 
-    // Get total payouts amount
+    // Get total payouts amount (executed this year)
     const totalPayouts = db.prepare(`
       SELECT COALESCE(SUM(amount_usd), 0) as total
       FROM payouts 
@@ -934,19 +934,15 @@ app.get("/waqf/:id/summary", (req, res) => {
         AND strftime('%Y', payout_date) = strftime('%Y', 'now')
     `).get(id) as { total: number };
 
-    // Get current year profit (from FK if set; otherwise aggregate current year distributed/allocated)
-    let currentYearProfit = db.prepare(`
-      SELECT profit_amount as total FROM profits WHERE id = ?
-    `).get(waqf.current_year_profit_id) as { total: number } | undefined;
-    if (!currentYearProfit) {
-      currentYearProfit = db.prepare(`
-        SELECT COALESCE(SUM(profit_amount), 0) as total
-        FROM profits 
-        WHERE waqf_gov_id = ? 
-          AND strftime('%Y', profit_period_start) = strftime('%Y', 'now')
-          AND status IN ('allocated','distributed','pending')
-      `).get(id) as { total: number };
-    }
+    // Get LAST year's profit (true last-year), fall back to waqf.last_year_profit_usd
+    const lastYearProfitRow = db.prepare(`
+      SELECT COALESCE(SUM(profit_amount), 0) as total
+      FROM profits
+      WHERE waqf_gov_id = ?
+        AND strftime('%Y', profit_period_start) = strftime('%Y', 'now','-1 year')
+        AND status IN ('allocated','distributed','pending')
+    `).get(id) as { total: number } | undefined;
+    const lastYearProfit = Number(lastYearProfitRow?.total ?? waqf.last_year_profit_usd ?? 0);
 
     // Get this month's payouts
     const thisMonthPayouts = db.prepare(`
@@ -957,7 +953,7 @@ app.get("/waqf/:id/summary", (req, res) => {
         AND status = 'completed'
     `).get(id) as { total: number };
 
-    // Get this month's profits
+    // Get this month's profits (for informational month view)
     const thisMonthProfits = db.prepare(`
       SELECT COALESCE(SUM(profit_amount), 0) as total
       FROM profits 
@@ -971,8 +967,8 @@ app.get("/waqf/:id/summary", (req, res) => {
       waqfName: waqf.waqf_name,
       totals: {
         corpus: waqf.corpus_usd,
-        lastYearProfit: currentYearProfit?.total || 0,
-        totalPayouts: currentYearProfit?.total || 0,
+        lastYearProfit: lastYearProfit,
+        totalPayouts: totalPayouts.total,
         executedPayouts: totalPayouts.total,
         beneficiaries: beneficiaryCount.count,
         distributionRules: distributionRulesCount.count
@@ -982,8 +978,8 @@ app.get("/waqf/:id/summary", (req, res) => {
         outflow: thisMonthPayouts.total
       },
       pending: {
-        currentYearProfit: currentYearProfit.total,
-        pendingPayout: Math.max(0, (currentYearProfit?.total || 0) - (totalPayouts?.total || 0))
+        currentYearProfit: lastYearProfit,
+        pendingPayout: Math.max(0, lastYearProfit - (totalPayouts?.total || 0))
       }
     });
   } catch (e: any) {
