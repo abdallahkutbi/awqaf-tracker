@@ -226,8 +226,9 @@ function PayoutConfirmInner() {
           disabled={submitting}
           style={{
             padding: "12px 24px",
-            border: "1px solid #ccc",
-            backgroundColor: "white",
+            border: "none",
+            backgroundColor: submitting ? "#e57373" : "#c62828",
+            color: "white",
             borderRadius: 6,
             cursor: submitting ? "not-allowed" : "pointer"
           }}
